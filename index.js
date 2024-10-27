@@ -1,46 +1,60 @@
-const express = require("express");
+const express = require('express');
+const axios = require('axios');
+const fs = require('fs');
+
 const app = express();
+const port = 3000;
 
-app.use(express.urlencoded({extended: false}));
-const exampleFragment = `Example of Read and parse 
-                         POST/PATCH/PUT request JSON 
-                         or form body with Express 
-                         and no dependencies`;
-const seeCodeFragment = `<strong>Deploying on vercel.com</strong>`
-const testText = `<html>
-                        <body>
-                          ${exampleFragment}
-                          <h2>Submit the following form</h2>
-                          <div>
-                            <form action="/form" method="post">
-                              <label for="something">Enter something:</label>
-                              <input type="text" id="something" name="something" />
-                              <button type="submit" value="">Send it</button>
-                            </form>
-                          </div>
-                          ${seeCodeFragment}
-                        </body>
-                    </html>
-`;
+app.use(express.json());
 
-app.get("/", (req, res) => res.send(testText));
+const fetchUrls = async () => {
+  try {
+    const data = fs.readFileSync('url.json', 'utf8');
+    const urls = JSON.parse(data).urls;
 
-app.post("/form", (req, res) => {
-    res.send(`<html>
-                      <body>
-                        ${exampleFragment}
-                        <p>
-                          Full body is: <pre><code>${JSON.stringify(req.body)}</code></pre>
-                        </p>
-                        <p><a href="/">Go back</a></p>
-                        ${seeCodeFragment}
-                      </body>
-                    </html>
-                `
-    );
+    const fetchPromises = urls.map(url => axios.get(url));
+    const responses = await Promise.all(fetchPromises);
+
+    responses.forEach((response, index) => {
+      console.log(`Fetched data from ${urls[index]}:`, response.data);
+    });
+  } catch (error) {
+    console.error('An error occurred:', error);
+  }
+};
+
+const fetchInterval = 15000; // 15 seconds in milliseconds
+
+const fetchDataRepeatedly = async () => {
+  while (true) {
+    await fetchUrls();
+    await new Promise(resolve => setTimeout(resolve, fetchInterval));
+  }
+};
+
+app.get('/add', (req, res) => {
+  const { url } = req.query;
+
+  if (url) {
+    try {
+      const data = fs.readFileSync('url.json', 'utf8');
+      const urls = JSON.parse(data).urls;
+
+      urls.push(url);
+
+      fs.writeFileSync('url.json', JSON.stringify({ urls }, null, 2));
+
+      res.send('URL added successfully');
+    } catch (error) {
+      console.error('An error occurred:', error);
+      res.status(500).send('Error adding URL');
+    }
+  } else {
+    res.status(400).send('URL parameter is required');
+  }
 });
 
-const PORT = process.env.PORT || 3002;
-app.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
+app.listen(port, () => {
+  console.log(`App listening at http://localhost:${port}`);
+  fetchDataRepeatedly();
 });
